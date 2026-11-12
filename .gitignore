@@ -1,0 +1,11 @@
+node_modules/
+outputs/
+.openai/
+.env
+.env.*
+!.env.example
+.clasp.json
+*.log
+*.zip
+*.tar.gz
+.DS_Store
