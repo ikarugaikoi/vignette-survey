@@ -9,3 +9,19 @@ outputs/
 *.zip
 *.tar.gz
 .DS_Store
+
+# Private deployment settings and research exports
+.clasprc.json
+credentials*.json
+*service-account*.json
+private/
+data/
+exports/
+responses/
+participants/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.db
+*.sqlite*

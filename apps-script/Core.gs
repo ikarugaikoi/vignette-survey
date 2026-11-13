@@ -3,10 +3,17 @@
   const LEVELS = ['大', '中', '小'];
   const TYPES = ['金銭', '不倫'];
   const QUESTIONS = [
-    { id: 'wrongness', label: 'この人物の行為を、どの程度許せないと感じますか。', low: 'まったく感じない', high: '非常に強く感じる' },
-    { id: 'economic_advantage', label: 'この人物は、経済的に恵まれていると思いますか。', low: 'まったくそう思わない', high: '非常にそう思う' },
-    { id: 'intimacy_imagery', label: 'この記事を読んで、身体的に親密な場面がどの程度思い浮かびましたか。', low: 'まったく思い浮かばなかった', high: '非常にはっきりと思い浮かんだ' }
+    { id: 'read_more', label: 'この記事の続きを読みたいと思いますか。', low: '読みたくない', high: '読みたい', type: 'binary', block: 'Q1' },
+    { id: 'social_acceptability', label: '社会的に許されると思いますか。', low: 'まったくそう思わない', high: '非常にそう思う', type: 'likert7', block: 'Q2' },
+    { id: 'envy', label: 'ねたましいと思いますか。', low: 'まったくそう思わない', high: '非常にそう思う', type: 'likert7', block: 'Q2' },
+    { id: 'sexual_curiosity', label: '性的好奇心を感じましたか。', low: 'まったく感じなかった', high: '非常に強く感じた', type: 'likert7', block: 'Q2' }
   ];
+  function validateDemographics(value) {
+    if (!value || !['female','male','other'].includes(value.gender)) throw new Error('性別を選択してください。');
+    const other = typeof value.other === 'string' ? value.other.trim() : '';
+    if (value.gender === 'other' && (!other || other.length > 100)) throw new Error('その他の内容を1〜100字で入力してください。');
+    return {gender:value.gender,other:value.gender === 'other' ? other : ''};
+  }
   function key(x) { return [x.justice, x.envy, x.sexual].join('|'); }
   function rng(seed) {
     let a = seed >>> 0;
@@ -26,7 +33,7 @@
     return a;
   }
   function validateBank(bank) {
-    if (!Array.isArray(bank) || bank.length !== 108) throw new Error('刺激文は108件必要です。');
+    if (!Array.isArray(bank) || ![54,108].includes(bank.length)) throw new Error('刺激文は54件（各条件1件）または108件（各条件2件）必要です。');
     const ids = new Set(), groups = {};
     bank.forEach(x => {
       if (!x || typeof x.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(x.id) || ['__proto__','constructor','prototype'].includes(x.id) || ids.has(x.id)) throw new Error('刺激文IDは重複のない半角英数字・ハイフン・下線にしてください。');
@@ -37,32 +44,34 @@
     });
     for (const j of LEVELS) for (const e of LEVELS) for (const s of LEVELS) {
       const k = [j, e, s].join('|'), g = groups[k] || [];
-      if (g.length !== 4 || TYPES.some(t => g.filter(x => x.category === t).length !== 2)) throw new Error(k + ' は金銭2件・不倫2件の計4件にしてください。');
+      const perType = bank.length / 54;
+      if (g.length !== perType * 2 || TYPES.some(t => g.filter(x => x.category === t).length !== perType)) throw new Error(k + ' は金銭・不倫それぞれ' + perType + '件にしてください。');
     }
     return Object.keys(groups).sort().map(k => groups[k].slice().sort((a, b) => a.id.localeCompare(b.id)));
   }
-  function balancedMask(groups, random) {
-    const indexes = groups.map((_, i) => i);
-    for (let attempt = 0; attempt < 100000; attempt++) {
-      const selected = new Set(shuffle(indexes, random).slice(0, 13));
-      if (['justice', 'envy', 'sexual'].every(axis => LEVELS.every(level => {
-        const n = groups.reduce((n, g, i) => n + (selected.has(i) && g[0][axis] === level ? 1 : 0), 0);
-        return n === 4 || n === 5;
-      }))) return indexes.map(i => selected.has(i));
-    }
-    throw new Error('割り当てを生成できませんでした。もう一度お試しください。');
-  }
-  function allocateBlock(bank, seed) {
-    const groups = validateBank(bank), random = rng(seed);
-    const a = balancedMask(groups, random), b = balancedMask(groups, random);
-    const masks = shuffle([a, a.map(v => !v), b, b.map(v => !v)], random);
-    const schedules = [[], [], [], []];
-    groups.forEach((g, i) => {
-      const money = shuffle(g.filter(x => x.category === '金銭'), random);
-      const affair = shuffle(g.filter(x => x.category === '不倫'), random);
-      for (let p = 0; p < 4; p++) schedules[p].push(masks[p][i] ? money.pop() : affair.pop());
+  function validateQuestions(questions) {
+    if (!Array.isArray(questions) || questions.length < 1 || questions.length > 12) throw new Error('有効な質問は1〜12件にしてください。');
+    const ids = new Set();
+    questions.forEach(q => {
+      if (!q || typeof q.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(q.id) || ['__proto__','constructor','prototype'].includes(q.id) || ids.has(q.id)) throw new Error('質問IDが不正、または重複しています。');
+      ids.add(q.id);
+      if (q.type && !['binary','likert7'].includes(q.type)) throw new Error('質問typeはbinaryまたはlikert7にしてください。');
+      if (q.block && !['Q1','Q2'].includes(q.block)) throw new Error('質問blockはQ1またはQ2にしてください。');
+      for (const k of ['label','low','high']) if (typeof q[k] !== 'string' || !q[k].trim() || q[k].length > 1000) throw new Error('質問文・両端の説明を1〜1000字で入力してください。');
     });
-    return schedules.map(s => shuffle(s, random));
+    return questions;
+  }
+  function allocate54(bank, questions, seed) {
+    const groups = validateBank(bank);
+    validateQuestions(questions);
+    const random = rng(seed);
+    return {
+      items: shuffle(groups.flatMap(group => TYPES.map(type => {
+        const choices = group.filter(x => x.category === type);
+        return choices[Math.floor(random() * choices.length)];
+      })), random),
+      questions: questions.filter(q=>q.block==='Q1').concat(shuffle(questions.filter(q=>q.block!=='Q1').sort((a,b) => a.id.localeCompare(b.id)), random))
+    };
   }
   function validateAnswers(items, questions, answers, complete) {
     if (!answers || typeof answers !== 'object' || Array.isArray(answers)) throw new Error('回答データが不正です。');
@@ -75,7 +84,9 @@
       clean[id] = {};
       Object.keys(entry).forEach(q => {
         const n = entry[q];
-        if (!qs.has(q) || !Number.isInteger(n) || n < 1 || n > 7) throw new Error('回答は1〜7の整数にしてください。');
+        if (!qs.has(q)) throw new Error('質問IDが不正です。');
+        const binary=questions.find(x=>x.id===q).type==='binary';
+        if (!Number.isInteger(n) || (binary ? ![0,1].includes(n) : n < 1 || n > 7)) throw new Error(binary ? '二択の回答は0または1にしてください。' : '回答は1〜7の整数にしてください。');
         clean[id][q] = n;
       });
     });
@@ -87,7 +98,7 @@
     for (const x of items) for (const axis of ['category', 'justice', 'envy', 'sexual']) result[axis][x[axis]] = (result[axis][x[axis]] || 0) + 1;
     return result;
   }
-  const api = { LEVELS, TYPES, QUESTIONS, key, rng, shuffle, validateBank, allocateBlock, validateAnswers, summary };
+  const api = { LEVELS, TYPES, QUESTIONS, key, rng, shuffle, validateBank, validateQuestions, validateDemographics, allocate54, validateAnswers, summary };
   if (typeof module !== 'undefined') module.exports = api;
   root.StudyCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,5 +1,5 @@
 {
-  "name": "scandal-survey-prototype",
+  "name": "vignette-survey-108",
   "private": true,
   "scripts": {
     "build": "node build.js",

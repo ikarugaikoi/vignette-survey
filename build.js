@@ -7,6 +7,7 @@ function html(mode) {
   return read('index.html').replace('/* STYLES */', () => read('styles.css'))
     .replace('/* RUNTIME */', () => `window.RUNTIME_MODE = '${mode}';`)
     .replace('/* CORE */', () => read('core.js'))
+    .replace('/* SYNC */', () => read('sync.js'))
     .replace('/* BANK */', () => mode === 'local' ? read('demo-bank.js') : 'window.DEMO_BANK = [];')
     .replace('/* APP */', () => read('app.js'));
 }
